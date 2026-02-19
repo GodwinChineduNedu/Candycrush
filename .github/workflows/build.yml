@@ -1,26 +1,56 @@
 name: Build
-
 on:
   push:
     branches:
       - main
-
-
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
-      - uses: sonarsource/sonarqube-scan-action@master
+          fetch-depth: 0
+
+      - name: Build and analyze with SonarQube
+        uses: sonarsource/sonarqube-scan-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      # If you wish to fail your job when the Quality Gate is red, uncomment the
-      # following lines. This would typically be used to fail a deployment.
-      # - uses: sonarsource/sonarqube-quality-gate-action@master
-      #   timeout-minutes: 5
-      #   env:
-      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: NPM Install
+        run: npm install
+
+      - name: Install Trivy and scan files
+        run: trivy fs . > trivyfs.txt
+
+      - name: Docker Build and push
+        run: |
+          docker build -t candycrush .
+          docker tag candycrush ${{ secrets.DOCKERHUB_USERNAME }}/candycrush:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/candycrush:latest
+        env:
+          DOCKER_CLI_ACI: 1
+
+      - name: Docker login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Image scan with Trivy
+        run: trivy image ${{ secrets.DOCKERHUB_USERNAME }}/candycrush:latest > trivyimage.txt
+
+  deploy:
+    name: deploy
+    runs-on: self-hosted
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f deployment.yml
+          kubectl apply -f service.yml

@@ -1,8 +1,8 @@
 # Use Node.js LTS version as the base image
-FROM node:16
+FROM node:18-alpine
 
 # Set the maintainer information
-LABEL maintainer="mrcloudbook postbox.aj99@gmail.com"
+LABEL maintainer="godwinchinedunedu@gmail.com"
 
 # Set the working directory in the container
 WORKDIR /app
